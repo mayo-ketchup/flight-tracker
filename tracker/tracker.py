@@ -256,13 +256,52 @@ def fmt_time(t: str | None) -> str:
         return t
 
 
-def build_email(cfg: dict, run: dict, page_url: str) -> tuple[str, str, str]:
+def serpapi_account(api_key: str) -> dict | None:
+    """Searches left this month. SerpApi doesn't count this call as a search."""
+    if not api_key:
+        return None
+    url = "https://serpapi.com/account.json?" + urllib.parse.urlencode({"api_key": api_key})
+    try:
+        with urllib.request.urlopen(url, timeout=30) as resp:
+            acct = json.load(resp)
+    except Exception as e:
+        print(f"Couldn't check SerpApi searches left: {e}")
+        return None
+    left = acct.get("total_searches_left", acct.get("plan_searches_left"))
+    if left is None:
+        return None
+    return {"left": left, "per_month": acct.get("searches_per_month"),
+            "used": acct.get("this_month_usage")}
+
+
+def build_email(cfg: dict, run: dict, page_url: str, quota: dict | None = None) -> tuple[str, str, str]:
     month = month_label(run["target_month"])
     names = " & ".join(t["name"] for t in cfg["trips"])
-    subject = f"✈ Cheapest nonstop flights for {month}: {cfg['origin']} → {names}"
     cur = "$" if cfg.get("currency", "USD") == "USD" else cfg["currency"] + " "
     out_day = cfg["departure_weekday"].capitalize()
     ret_day = WEEKDAYS[(WEEKDAYS.index(out_day.lower()) + cfg["nights"]) % 7].capitalize()
+
+    # Work out each trip's top flights and anything under its target price first,
+    # so a deal can go at the top of the email.
+    per_trip, deals = [], []
+    for trip in cfg["trips"]:
+        rt = run["trips"].get(trip["id"])
+        if not rt:
+            continue
+        everything = top_flights(rt, 10_000)
+        target = trip.get("target_price")
+        under = [f for f in everything if target and f["price"] <= target]
+        per_trip.append((trip, everything[:cfg.get("top_n", 3)], target))
+        deals += [(trip, f, target) for f in under[:3]]
+
+    subject = f"✈ Cheapest nonstop flights for {month}: {cfg['origin']} → {names}"
+    if deals:
+        subject = f"🔥 {len(deals)} at or below your target · " + subject[2:]
+
+    def line(f):
+        dates = f"{short_date(f['depart'])} → {short_date(f['return'])}"
+        times = f"{fmt_time(f['depart_time'])} → {fmt_time(f['arrive_time'])} {f['arrive_airport'] or ''}"
+        return dates, times
 
     text = [f"Cheapest nonstop round trips for {month} "
             f"({out_day} → {ret_day}, {cfg['nights']} nights). Prices are round-trip per person.\n"]
@@ -271,27 +310,44 @@ def build_email(cfg: dict, run: dict, page_url: str) -> tuple[str, str, str]:
 <p style="margin:0 0 20px;color:#555">Nonstop, {escape(out_day)} → {escape(ret_day)} ({cfg['nights']} nights).
 Prices are round-trip per person.</p>"""]
 
-    for trip in cfg["trips"]:
-        rt = run["trips"].get(trip["id"])
-        if not rt:
-            continue
-        flights = top_flights(rt, cfg.get("top_n", 3))
-        text.append(f"{cfg['origin']} → {trip['name'].upper()}")
-        html.append(f'<h3 style="margin:24px 0 8px">{escape(cfg["origin"])} → {escape(trip["name"])}</h3>')
+    if deals:
+        text.append("🔥 AT OR BELOW YOUR TARGET PRICE")
+        html.append('<div style="background:#e3f5ee;border:1px solid #9fd8bf;border-radius:8px;padding:12px 14px;margin:0 0 20px">'
+                    '<b style="color:#12805c">🔥 At or below your target price</b>'
+                    '<table style="border-collapse:collapse;width:100%;font-size:14px;margin-top:6px">')
+        for trip, f, target in deals:
+            dates, times = line(f)
+            text.append(f"  {trip['name']}: {dates}  {f['airline']}  {cur}{f['price']} "
+                        f"(target {cur}{target})\n    {f['url']}")
+            html.append(f"""<tr><td style="padding:6px 8px 6px 0"><b>{escape(trip['name'])}</b> · {escape(dates)}<br>
+<span style="color:#555">{escape(f['airline'])} {escape(f['flight_number'])} · {escape(times)}</span></td>
+<td style="padding:6px 0;text-align:right;white-space:nowrap"><b style="font-size:17px;color:#12805c">{cur}{f['price']}</b><br>
+<span style="color:#555;font-size:12px">target {cur}{target}</span> · <a href="{escape(f['url'])}" style="color:#1a66d9">Book</a></td></tr>""")
+        html.append("</table></div>")
+        text.append("")
+
+    for trip, flights, target in per_trip:
+        heading = f"{cfg['origin']} → {trip['name']}"
+        tgt = f" (target {cur}{target})" if target else ""
+        text.append(heading.upper() + tgt)
+        html.append(f'<h3 style="margin:24px 0 8px">{escape(heading)}'
+                    + (f' <span style="font-weight:400;color:#777;font-size:13px">target {cur}{target}</span>' if target else "")
+                    + "</h3>")
         if not flights:
             text.append("  No nonstop flights found this week.\n")
             html.append('<p style="color:#555">No nonstop flights found this week.</p>')
             continue
         html.append('<table style="border-collapse:collapse;width:100%;font-size:14px">')
         for f in flights:
-            dates = f"{short_date(f['depart'])} → {short_date(f['return'])}"
-            times = f"{fmt_time(f['depart_time'])} → {fmt_time(f['arrive_time'])} {f['arrive_airport'] or ''}"
+            dates, times = line(f)
+            hit = bool(target and f["price"] <= target)
             text.append(f"  {dates}  {f['airline']} {f['flight_number']}  {times}  "
-                        f"{cur}{f['price']}\n    {f['url']}")
+                        f"{cur}{f['price']}{'  🔥' if hit else ''}\n    {f['url']}")
+            color = "#12805c" if hit else "#1a1a1a"
             html.append(f"""<tr style="border-bottom:1px solid #e5e5e5">
 <td style="padding:10px 8px 10px 0"><b>{escape(dates)}</b><br>
 <span style="color:#555">{escape(f['airline'])} {escape(f['flight_number'])} · {escape(times)}</span></td>
-<td style="padding:10px 8px;text-align:right;white-space:nowrap"><b style="font-size:17px">{cur}{f['price']}</b><br>
+<td style="padding:10px 8px;text-align:right;white-space:nowrap"><b style="font-size:17px;color:{color}">{cur}{f['price']}{' 🔥' if hit else ''}</b><br>
 <a href="{escape(f['url'])}" style="color:#1a66d9">Google Flights</a></td></tr>""")
         html.append("</table>")
         text.append("")
@@ -308,6 +364,15 @@ Prices are round-trip per person.</p>"""]
         html.append(f"""<p style="margin-top:24px"><a href="{escape(page_url)}"
 style="background:#1a66d9;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">
 See full details &amp; price trends →</a></p>""")
+    if quota:
+        weekly = sum(len(t["dates"]) for t in run["trips"].values())
+        total = f" of {quota['per_month']}" if quota.get("per_month") else ""
+        low = quota["left"] < weekly * 2
+        msg = f"SerpApi: {quota['left']}{total} searches left this month (each Monday uses about {weekly})."
+        if low:
+            msg += " Running low: next week's check may not finish."
+        text.append(msg)
+        html.append(f'<p style="color:{"#c0392b" if low else "#888"};font-size:12px;margin-top:16px">{escape(msg)}</p>')
     html.append("</div>")
     return subject, "\n".join(text), "\n".join(html)
 
@@ -355,7 +420,8 @@ def site_payload(cfg: dict, runs: list[dict], demo: bool) -> dict:
         "generated_at": datetime.now(PR_TZ).isoformat(timespec="minutes"),
         "demo": demo,
         "config": {k: cfg[k] for k in ("origin", "departure_weekday", "nights", "nonstop_only", "currency")}
-                  | {"trips": [{"id": t["id"], "name": t["name"], "destination": t["destination"]}
+                  | {"trips": [{"id": t["id"], "name": t["name"], "destination": t["destination"],
+                                "target_price": t.get("target_price")}
                                for t in cfg["trips"]]},
         "runs": runs,
     }
@@ -378,7 +444,8 @@ def main() -> int:
             print("No saved results to email.", file=sys.stderr)
             return 1
         latest = max(runs, key=lambda r: (r["run_date"], r["target_month"]))
-        send_email(*build_email(cfg, latest, os.environ.get("PAGE_URL", "")))
+        quota = serpapi_account(os.environ.get("SERPAPI_KEY", "").strip())
+        send_email(*build_email(cfg, latest, os.environ.get("PAGE_URL", ""), quota))
         return 0
 
     weekday = WEEKDAYS.index(cfg["departure_weekday"].lower())
@@ -421,7 +488,7 @@ def main() -> int:
     all_failed = all(e["error"] and not e["options"]
                      for t in run["trips"].values() for e in t["dates"])
     if not args.no_email:
-        send_email(*build_email(cfg, run, os.environ.get("PAGE_URL", "")))
+        send_email(*build_email(cfg, run, os.environ.get("PAGE_URL", ""), serpapi_account(api_key)))
     if all_failed:
         print("Every search failed - check the SerpApi key and quota.", file=sys.stderr)
         return 1
@@ -429,4 +496,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
+    try:  # Windows consoles otherwise choke on the ✈ / 🔥 in previews
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except AttributeError:
+        pass
     sys.exit(main())

@@ -53,10 +53,10 @@ jobs:
           git diff --cached --quiet || git commit -m "Flight prices for $(date -u +%F)"
           git push
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
         if: ${{ !inputs.email_only }}
 
-      - uses: actions/upload-pages-artifact@v4
+      - uses: actions/upload-pages-artifact@v5
         if: ${{ !inputs.email_only }}
         with:
           path: site
@@ -64,11 +64,12 @@ jobs:
       - name: Publish page
         if: ${{ !inputs.email_only }}
         id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
 
       - name: Send email
         if: github.event_name == 'schedule' || inputs.send_email || inputs.email_only
         env:
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}  # only to check searches left; doesn't use one
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}

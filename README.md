@@ -71,6 +71,13 @@ Edit `config.json`, for example `"nights": 3`, `"top_n": 5`, or add another trip
 ```
 Each extra trip adds about 4–5 searches a week.
 
+**Target price:** each trip has a `"target_price"` (starts at 250). When a flight is at or
+under it, the email subject starts with 🔥, the deal goes at the top of the email, and the
+page marks it with a badge and a dashed line on the charts. Remove the field to turn it off.
+
+The email also shows how many SerpApi searches are left this month (checking doesn't use one)
+and warns when there aren't enough left for next Monday.
+
 ## Notes
 
 - Prices are **round-trip per person**. The page shows the outbound flight;

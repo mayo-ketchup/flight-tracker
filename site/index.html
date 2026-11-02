@@ -76,6 +76,7 @@ td.num { text-align: right; font-weight: 700; white-space: nowrap; }
 .airline { display: flex; align-items: center; gap: 8px; }
 .airline img { width: 22px; height: 22px; border-radius: 4px; background: #fff; }
 .empty { color: var(--muted); padding: 8px 0 14px; }
+.deal { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--low-soft); color: var(--low); }
 footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
 @media (max-width: 760px) { .charts { grid-template-columns: 1fr; } .sum-date { min-width: 0; } }
 </style>
@@ -158,6 +159,7 @@ function render() {
   if (!runs.length) { main.innerHTML = `<div class="card empty">No results for this trip and month.</div>`; return; }
   const latest = runs[runs.length - 1], prev = runs[runs.length - 2];
   const trip = latest.trips[state.trip];
+  const target = (DATA.config.trips.find(t => t.id === state.trip) || {}).target_price || null;
 
   // Top 3 across all dates in the latest check
   const all = trip.dates.flatMap(e => e.options.map(o => ({...o, depart: e.depart, ret: e.return, url: e.google_flights_url, pi: e.price_insights})));
@@ -170,7 +172,7 @@ function render() {
       <div><b>${esc(shortDate(f.depart))} → ${esc(shortDate(f.ret))}</b></div>
       <div class="meta">${esc(f.airline)} ${esc(f.flight_number)}</div>
       <div class="meta">${esc(fmtTime(f.depart_time))} ${esc(f.depart_airport)} → ${esc(fmtTime(f.arrive_time))} ${esc(f.arrive_airport)} · ${fmtDur(f.duration_min)}</div>
-      <div style="margin-top:6px">${levelTag(f.pi)}</div>
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">${levelTag(f.pi)}${target && f.price <= target ? `<span class="deal">🔥 At or under your ${money(target)} target</span>` : ""}</div>
       <a class="btn" href="${esc(f.url)}" target="_blank" rel="noopener">Book on Google Flights</a>
     </div>`).join("") : `<div class="empty">No nonstop flights found in the latest check.</div>`;
 
@@ -210,7 +212,7 @@ function render() {
   main.innerHTML = `
     <section class="card">
       <h2>Cheapest right now</h2>
-      <p class="hint">From the check on ${esc(parseISO(latest.run_date).toLocaleDateString("en-US", {weekday:"long", month:"long", day:"numeric"}))}.</p>
+      <p class="hint">From the check on ${esc(parseISO(latest.run_date).toLocaleDateString("en-US", {weekday:"long", month:"long", day:"numeric"}))}.${target ? ` Your target price is ${money(target)}; the dashed line on the charts marks it.` : ""}</p>
       <div class="top3">${topHtml}</div>
     </section>
     <div class="charts">
@@ -231,10 +233,10 @@ function render() {
       ${datesHtml}
     </section>`;
 
-  drawCharts(runs, trip);
+  drawCharts(runs, trip, target);
 }
 
-function drawCharts(runs, trip) {
+function drawCharts(runs, trip, target) {
   if (!window.Chart) return;
   const text = cssVar("--text"), muted = cssVar("--muted"), line = cssVar("--line");
   const series = ["--s1","--s2","--s3","--s4","--s5"].map(cssVar);
@@ -254,6 +256,9 @@ function drawCharts(runs, trip) {
     borderColor: series[i % series.length], backgroundColor: series[i % series.length],
     borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, tension: 0.25, spanGaps: true,
   }));
+  const targetLine = n => ({ type: "line", label: "Your target", data: Array(n).fill(target),
+    borderColor: cssVar("--low"), borderDash: [6, 5], borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 0, fill: false, order: 0 });
+  if (target) datasets.push(targetLine(labels.length));
   charts.push(new Chart(document.getElementById("trend"), {
     type: "line", data: { labels, datasets },
     options: { maintainAspectRatio: false, interaction: { mode: "index", intersect: false }, scales,
@@ -267,7 +272,8 @@ function drawCharts(runs, trip) {
     type: "bar",
     data: { labels: departs.map(shortDate),
       datasets: [{ label: "Cheapest", data: lows, borderRadius: 6, maxBarThickness: 48,
-        backgroundColor: lows.map(v => v === best ? series[2] : series[0]) }] },
+        backgroundColor: lows.map(v => v === best ? series[2] : series[0]) }]
+        .concat(target ? [targetLine(departs.length)] : []) },
     options: { maintainAspectRatio: false, scales, plugins: { legend: { display: false }, tooltip } }
   }));
 }
