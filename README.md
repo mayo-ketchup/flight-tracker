@@ -1,7 +1,7 @@
 # SJU Flight Tracker
 
 Every Monday at 7am (Puerto Rico time) this checks Google Flights for next month's
-**Thursday → Monday (4 nights) nonstop** round trips from SJU to:
+**Wednesday → Sunday (4 nights) nonstop** round trips from SJU to:
 
 - **Washington, DC** (DCA, IAD, BWI)
 - **New York** (JFK)
@@ -9,7 +9,7 @@ Every Monday at 7am (Puerto Rico time) this checks Google Flights for next month
 It saves the prices, updates a web page with flight details and price-trend charts,
 and emails you the 3 cheapest flights for each trip with a link to the page.
 
-About 8–10 SerpApi searches a week (one per Thursday per trip).
+About 8–10 SerpApi searches a week (one per Wednesday per trip).
 
 ## Files
 

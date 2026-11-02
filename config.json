@@ -1,6 +1,6 @@
 {
   "origin": "SJU",
-  "departure_weekday": "Thursday",
+  "departure_weekday": "Wednesday",
   "nights": 4,
   "nonstop_only": true,
   "top_n": 3,

@@ -261,12 +261,14 @@ def build_email(cfg: dict, run: dict, page_url: str) -> tuple[str, str, str]:
     names = " & ".join(t["name"] for t in cfg["trips"])
     subject = f"✈ Cheapest nonstop flights for {month}: {cfg['origin']} → {names}"
     cur = "$" if cfg.get("currency", "USD") == "USD" else cfg["currency"] + " "
+    out_day = cfg["departure_weekday"].capitalize()
+    ret_day = WEEKDAYS[(WEEKDAYS.index(out_day.lower()) + cfg["nights"]) % 7].capitalize()
 
     text = [f"Cheapest nonstop round trips for {month} "
-            f"({cfg['departure_weekday']} → +{cfg['nights']} nights). Prices are round-trip per person.\n"]
+            f"({out_day} → {ret_day}, {cfg['nights']} nights). Prices are round-trip per person.\n"]
     html = [f"""<div style="font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:620px;color:#1a1a1a">
 <h2 style="margin:0 0 4px">✈ Cheapest flights for {escape(month)}</h2>
-<p style="margin:0 0 20px;color:#555">Nonstop, {escape(cfg['departure_weekday'])} → Monday ({cfg['nights']} nights).
+<p style="margin:0 0 20px;color:#555">Nonstop, {escape(out_day)} → {escape(ret_day)} ({cfg['nights']} nights).
 Prices are round-trip per person.</p>"""]
 
     for trip in cfg["trips"]:
