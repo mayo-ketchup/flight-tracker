@@ -313,8 +313,9 @@ See full details &amp; price trends →</a></p>""")
 
 
 def send_email(subject: str, text: str, html: str) -> None:
-    sender = os.environ.get("GMAIL_ADDRESS", "").strip()
-    password = os.environ.get("GMAIL_APP_PASSWORD", "").replace(" ", "")
+    sender = "".join(os.environ.get("GMAIL_ADDRESS", "").split())
+    # App passwords are shown as "abcd efgh ijkl mnop"; drop all spaces/newlines from pasting.
+    password = "".join(os.environ.get("GMAIL_APP_PASSWORD", "").split())
     to = os.environ.get("EMAIL_TO", "").strip() or sender
     if not sender or not password:
         print("Email skipped: GMAIL_ADDRESS / GMAIL_APP_PASSWORD not set.")
@@ -323,9 +324,15 @@ def send_email(subject: str, text: str, html: str) -> None:
     msg["Subject"], msg["From"], msg["To"] = subject, sender, to
     msg.set_content(text)
     msg.add_alternative(html, subtype="html")
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context()) as s:
-        s.login(sender, password)
-        s.send_message(msg)
+    print(f"Logging in to Gmail as {sender[:2]}***@{sender.partition('@')[2]} "
+          f"(app password length: {len(password)}, should be 16)")
+    try:
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465, context=ssl.create_default_context()) as s:
+            s.login(sender, password)
+            s.send_message(msg)
+    except (smtplib.SMTPAuthenticationError, smtplib.SMTPServerDisconnected) as e:
+        raise SystemExit(f"Gmail login failed ({e}). Check that GMAIL_ADDRESS is the full Gmail "
+                         "address and GMAIL_APP_PASSWORD is a current 16-character app password.")
     print(f"Email sent to {to}.")
 
 
