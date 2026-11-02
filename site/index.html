@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SJU Flight Tracker</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>✈</text></svg>">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --text: #16181d; --muted: #5d6470; --line: #e3e6eb;
+  --accent: #1a66d9; --accent-soft: #e8f0fc;
+  --low: #12805c; --low-soft: #e3f5ee; --typical: #8a6d00; --typical-soft: #fbf3d9;
+  --high: #c0392b; --high-soft: #fbe7e4;
+  --s1: #1a66d9; --s2: #d9480f; --s3: #12805c; --s4: #8e44ad; --s5: #b8860b;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111317; --card: #1a1d23; --text: #e8eaee; --muted: #9aa1ad; --line: #2c3039;
+    --accent: #6ea4ff; --accent-soft: #1d2a40;
+    --low: #4cc995; --low-soft: #15302a; --typical: #e5c35a; --typical-soft: #332c15;
+    --high: #ff7b6b; --high-soft: #3a1e1b;
+    --s1: #6ea4ff; --s2: #ff8a4c; --s3: #4cc995; --s4: #c08bf0; --s5: #e5c35a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 24px 16px 64px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+h1 { font-size: 26px; margin: 0; letter-spacing: -0.01em; }
+.sub { color: var(--muted); margin: 4px 0 0; }
+select { font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--card); color: var(--text); }
+.banner { background: var(--typical-soft); color: var(--typical); padding: 10px 14px; border-radius: 10px;
+  margin: 16px 0; font-size: 14px; }
+.tabs { display: flex; gap: 8px; margin: 20px 0 16px; flex-wrap: wrap; }
+.tab { border: 1px solid var(--line); background: var(--card); color: var(--text); padding: 8px 16px;
+  border-radius: 999px; cursor: pointer; font: inherit; font-weight: 600; }
+.tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 16px; }
+.card h2 { font-size: 17px; margin: 0 0 4px; }
+.card .hint { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+.top3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.pick { border: 1px solid var(--line); border-radius: 12px; padding: 14px; position: relative; }
+.pick .rank { position: absolute; top: 12px; right: 14px; color: var(--muted); font-weight: 700; }
+.price { font-size: 26px; font-weight: 750; letter-spacing: -0.02em; }
+.meta { color: var(--muted); font-size: 13px; }
+.btn { display: inline-block; margin-top: 10px; background: var(--accent); color: #fff; text-decoration: none;
+  padding: 7px 14px; border-radius: 8px; font-size: 14px; font-weight: 600; }
+.btn.ghost { background: var(--accent-soft); color: var(--accent); }
+.charts { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.chartbox { position: relative; height: 280px; }
+.level { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px;
+  text-transform: uppercase; letter-spacing: 0.03em; }
+.level.low { background: var(--low-soft); color: var(--low); }
+.level.typical { background: var(--typical-soft); color: var(--typical); }
+.level.high { background: var(--high-soft); color: var(--high); }
+details.date { border-top: 1px solid var(--line); }
+details.date:first-of-type { border-top: 0; }
+details.date summary { cursor: pointer; padding: 12px 0; display: flex; flex-wrap: wrap; gap: 8px 16px;
+  align-items: center; list-style: none; }
+details.date summary::-webkit-details-marker { display: none; }
+details.date summary::before { content: "▸"; color: var(--muted); width: 12px; }
+details.date[open] summary::before { content: "▾"; }
+.sum-date { font-weight: 650; min-width: 190px; }
+.sum-price { font-weight: 700; margin-left: auto; }
+.change { font-size: 13px; font-weight: 600; }
+.change.down { color: var(--low); } .change.up { color: var(--high); }
+.tablewrap { overflow-x: auto; padding-bottom: 12px; }
+table { border-collapse: collapse; width: 100%; font-size: 14px; min-width: 620px; }
+th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase;
+  letter-spacing: 0.03em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+td { padding: 9px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num { text-align: right; font-weight: 700; white-space: nowrap; }
+.airline { display: flex; align-items: center; gap: 8px; }
+.airline img { width: 22px; height: 22px; border-radius: 4px; background: #fff; }
+.empty { color: var(--muted); padding: 8px 0 14px; }
+footer { color: var(--muted); font-size: 13px; margin-top: 24px; }
+@media (max-width: 760px) { .charts { grid-template-columns: 1fr; } .sum-date { min-width: 0; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>✈ SJU Flight Tracker</h1>
+      <p class="sub" id="subtitle">Loading…</p>
+    </div>
+    <label>Trip month&nbsp; <select id="month"></select></label>
+  </header>
+  <div id="banner"></div>
+  <div class="tabs" id="tabs" role="tablist"></div>
+  <main id="main"></main>
+  <footer id="footer"></footer>
+</div>
+
+<script>
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+let DATA = null, charts = [];
+const state = { month: null, trip: null };
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const money = n => n == null ? "–" : "$" + Number(n).toLocaleString("en-US");
+const parseISO = s => { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); };
+const shortDate = s => { const d = parseISO(s); return d.toLocaleDateString("en-US", {weekday:"short", month:"short", day:"numeric"}); };
+const monthLabel = ym => { const [y,m] = ym.split("-"); return `${MONTHS[+m-1]} ${y}`; };
+const fmtTime = t => {
+  if (!t) return "?";
+  const [, hm] = t.split(" "); if (!hm) return t;
+  let [h, m] = hm.split(":").map(Number); const ap = h >= 12 ? "PM" : "AM"; h = h % 12 || 12;
+  return `${h}:${String(m).padStart(2,"0")} ${ap}`;
+};
+const fmtDur = m => m ? `${Math.floor(m/60)}h ${m%60}m` : "–";
+const cheapest = entry => entry.options.length ? entry.options[0].price : null;
+
+function runsFor(month) { return DATA.runs.filter(r => r.target_month === month).sort((a,b) => a.run_date.localeCompare(b.run_date)); }
+
+function levelTag(pi) {
+  if (!pi || !pi.price_level) return "";
+  const lvl = String(pi.price_level).toLowerCase();
+  const range = pi.typical_price_range ? ` title="Typical: ${money(pi.typical_price_range[0])}–${money(pi.typical_price_range[1])}"` : "";
+  return `<span class="level ${esc(lvl)}"${range}>${esc(lvl)}</span>`;
+}
+
+function init() {
+  const months = [...new Set(DATA.runs.map(r => r.target_month))].sort().reverse();
+  const sel = document.getElementById("month");
+  sel.innerHTML = months.map(m => `<option value="${m}">${monthLabel(m)}</option>`).join("");
+  state.month = months[0];
+  state.trip = DATA.config.trips[0]?.id;
+  sel.onchange = () => { state.month = sel.value; render(); };
+
+  const c = DATA.config;
+  document.getElementById("subtitle").textContent =
+    `Nonstop round trips from ${c.origin} · leave ${c.departure_weekday}, ${c.nights} nights · checked every Monday`;
+  if (DATA.demo) document.getElementById("banner").innerHTML =
+    `<div class="banner">This is <b>demo data</b> for previewing the page. Real prices appear after the first Monday check.</div>`;
+  document.getElementById("footer").innerHTML =
+    `Last updated ${esc(new Date(DATA.generated_at).toLocaleString("en-US", {dateStyle:"medium", timeStyle:"short"}))}.
+     Prices are round-trip per person in ${esc(c.currency)}, as shown on Google Flights at check time. They can change before you book.
+     Flight details show the outbound flight; choose your return flight on Google Flights.`;
+
+  const tabs = document.getElementById("tabs");
+  tabs.innerHTML = c.trips.map(t =>
+    `<button class="tab" role="tab" data-trip="${esc(t.id)}">${esc(c.origin)} → ${esc(t.name)}</button>`).join("");
+  tabs.querySelectorAll(".tab").forEach(b => b.onclick = () => { state.trip = b.dataset.trip; render(); });
+  if (!months.length) { document.getElementById("main").innerHTML = `<div class="card empty">No results yet. The first check runs on Monday.</div>`; return; }
+  render();
+}
+
+function render() {
+  document.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", b.dataset.trip === state.trip));
+  charts.forEach(c => c.destroy()); charts = [];
+  const runs = runsFor(state.month).filter(r => r.trips[state.trip]);
+  const main = document.getElementById("main");
+  if (!runs.length) { main.innerHTML = `<div class="card empty">No results for this trip and month.</div>`; return; }
+  const latest = runs[runs.length - 1], prev = runs[runs.length - 2];
+  const trip = latest.trips[state.trip];
+
+  // Top 3 across all dates in the latest check
+  const all = trip.dates.flatMap(e => e.options.map(o => ({...o, depart: e.depart, ret: e.return, url: e.google_flights_url, pi: e.price_insights})));
+  all.sort((a,b) => a.price - b.price);
+  const top = all.slice(0, 3);
+  const topHtml = top.length ? top.map((f, i) => `
+    <div class="pick">
+      <span class="rank">#${i+1}</span>
+      <div class="price">${money(f.price)}</div>
+      <div><b>${esc(shortDate(f.depart))} → ${esc(shortDate(f.ret))}</b></div>
+      <div class="meta">${esc(f.airline)} ${esc(f.flight_number)}</div>
+      <div class="meta">${esc(fmtTime(f.depart_time))} ${esc(f.depart_airport)} → ${esc(fmtTime(f.arrive_time))} ${esc(f.arrive_airport)} · ${fmtDur(f.duration_min)}</div>
+      <div style="margin-top:6px">${levelTag(f.pi)}</div>
+      <a class="btn" href="${esc(f.url)}" target="_blank" rel="noopener">Book on Google Flights</a>
+    </div>`).join("") : `<div class="empty">No nonstop flights found in the latest check.</div>`;
+
+  // Per-date details
+  const prevByDate = {};
+  if (prev) (prev.trips[state.trip]?.dates || []).forEach(e => prevByDate[e.depart] = cheapest(e));
+  const datesHtml = trip.dates.map(e => {
+    const low = cheapest(e), before = prevByDate[e.depart];
+    let change = "";
+    if (low != null && before != null && low !== before) {
+      const d = low - before;
+      change = `<span class="change ${d < 0 ? "down" : "up"}">${d < 0 ? "▼" : "▲"} ${money(Math.abs(d))} vs last week</span>`;
+    }
+    const rows = e.options.map(o => `
+      <tr>
+        <td><div class="airline">${o.airline_logo ? `<img src="${esc(o.airline_logo)}" alt="">` : ""}<div><b>${esc(o.airline)}</b><div class="meta">${esc(o.flight_number)}</div></div></div></td>
+        <td>${esc(fmtTime(o.depart_time))} <span class="meta">${esc(o.depart_airport)}</span><br>→ ${esc(fmtTime(o.arrive_time))} <span class="meta">${esc(o.arrive_airport)}</span></td>
+        <td>${fmtDur(o.duration_min)}</td>
+        <td>${esc(o.airplane || "–")}<div class="meta">${esc([o.travel_class, o.legroom && o.legroom + " legroom"].filter(Boolean).join(" · "))}</div></td>
+        <td class="num">${money(o.price)}</td>
+      </tr>`).join("");
+    return `
+      <details class="date">
+        <summary>
+          <span class="sum-date">${esc(shortDate(e.depart))} → ${esc(shortDate(e.return))}</span>
+          ${levelTag(e.price_insights)} ${change}
+          <span class="sum-price">${low != null ? "from " + money(low) : "no nonstops"}</span>
+        </summary>
+        ${e.options.length ? `<div class="tablewrap"><table>
+          <thead><tr><th>Airline</th><th>Outbound</th><th>Length</th><th>Plane</th><th style="text-align:right">Round trip</th></tr></thead>
+          <tbody>${rows}</tbody></table></div>` : `<div class="empty">${esc(e.error || "No nonstop flights found.")}</div>`}
+        <a class="btn ghost" href="${esc(e.google_flights_url)}" target="_blank" rel="noopener">Open this trip on Google Flights</a>
+        <div style="height:14px"></div>
+      </details>`;
+  }).join("");
+
+  main.innerHTML = `
+    <section class="card">
+      <h2>Cheapest right now</h2>
+      <p class="hint">From the check on ${esc(parseISO(latest.run_date).toLocaleDateString("en-US", {weekday:"long", month:"long", day:"numeric"}))}.</p>
+      <div class="top3">${topHtml}</div>
+    </section>
+    <div class="charts">
+      <section class="card">
+        <h2>Price trend by trip date</h2>
+        <p class="hint">Cheapest nonstop price for each trip date at each Monday check.</p>
+        <div class="chartbox"><canvas id="trend"></canvas></div>
+      </section>
+      <section class="card">
+        <h2>Cheapest by trip date this week</h2>
+        <p class="hint">Which weekend is cheapest right now.</p>
+        <div class="chartbox"><canvas id="bars"></canvas></div>
+      </section>
+    </div>
+    <section class="card">
+      <h2>All flights by date</h2>
+      <p class="hint">Click a date to see every nonstop flight found.</p>
+      ${datesHtml}
+    </section>`;
+
+  drawCharts(runs, trip);
+}
+
+function drawCharts(runs, trip) {
+  if (!window.Chart) return;
+  const text = cssVar("--text"), muted = cssVar("--muted"), line = cssVar("--line");
+  const series = ["--s1","--s2","--s3","--s4","--s5"].map(cssVar);
+  Chart.defaults.color = muted;
+  Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+  const scales = {
+    x: { grid: { display: false }, ticks: { color: muted } },
+    y: { grid: { color: line }, ticks: { color: muted, callback: v => "$" + v } },
+  };
+  const tooltip = { callbacks: { label: ctx => `${ctx.dataset.label || ""}: ${money(ctx.parsed.y)}` } };
+
+  const departs = trip.dates.map(e => e.depart);
+  const labels = runs.map(r => parseISO(r.run_date).toLocaleDateString("en-US", {month:"short", day:"numeric"}));
+  const datasets = departs.map((dep, i) => ({
+    label: shortDate(dep),
+    data: runs.map(r => { const e = r.trips[state.trip]?.dates.find(x => x.depart === dep); return e ? cheapest(e) : null; }),
+    borderColor: series[i % series.length], backgroundColor: series[i % series.length],
+    borderWidth: 2, pointRadius: 4, pointHoverRadius: 6, tension: 0.25, spanGaps: true,
+  }));
+  charts.push(new Chart(document.getElementById("trend"), {
+    type: "line", data: { labels, datasets },
+    options: { maintainAspectRatio: false, interaction: { mode: "index", intersect: false }, scales,
+      plugins: { legend: { position: "bottom", labels: { color: text, boxWidth: 12, usePointStyle: true } },
+        tooltip: { callbacks: { title: items => "Checked " + items[0].label, label: tooltip.callbacks.label } } } }
+  }));
+
+  const lows = trip.dates.map(cheapest);
+  const best = Math.min(...lows.filter(v => v != null));
+  charts.push(new Chart(document.getElementById("bars"), {
+    type: "bar",
+    data: { labels: departs.map(shortDate),
+      datasets: [{ label: "Cheapest", data: lows, borderRadius: 6, maxBarThickness: 48,
+        backgroundColor: lows.map(v => v === best ? series[2] : series[0]) }] },
+    options: { maintainAspectRatio: false, scales, plugins: { legend: { display: false }, tooltip } }
+  }));
+}
+
+fetch("data.json", { cache: "no-store" })
+  .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+  .then(d => { DATA = d; init(); })
+  .catch(() => {
+    document.getElementById("subtitle").textContent = "No data yet.";
+    document.getElementById("main").innerHTML = `<div class="card empty">No results yet. The first check runs on Monday.</div>`;
+  });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => DATA && render());
+</script>
+</body>
+</html>

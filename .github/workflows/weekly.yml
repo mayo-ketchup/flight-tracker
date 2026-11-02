@@ -1,0 +1,67 @@
+name: Weekly flight check
+
+on:
+  schedule:
+    # Mondays at 11:00 UTC = 7:00am Puerto Rico (UTC-4 all year).
+    # GitHub sometimes starts scheduled runs a few minutes late.
+    - cron: "0 11 * * 1"
+  workflow_dispatch:
+    inputs:
+      send_email:
+        description: "Send the email"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: flight-check
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Search flights and update data
+        env:
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+        run: python tracker/tracker.py --no-email
+
+      - name: Save price history
+        run: |
+          git config user.name "flight-tracker-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/history.json
+          git diff --cached --quiet || git commit -m "Flight prices for $(date -u +%F)"
+          git push
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site
+
+      - name: Publish page
+        id: deploy
+        uses: actions/deploy-pages@v4
+
+      - name: Send email
+        if: github.event_name == 'schedule' || inputs.send_email
+        env:
+          GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+        run: python tracker/tracker.py --email-only

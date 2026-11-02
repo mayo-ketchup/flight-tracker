@@ -1,0 +1,12 @@
+{
+  "origin": "SJU",
+  "departure_weekday": "Thursday",
+  "nights": 4,
+  "nonstop_only": true,
+  "top_n": 3,
+  "currency": "USD",
+  "trips": [
+    { "id": "washington", "name": "Washington, DC", "destination": "DCA,IAD,BWI" },
+    { "id": "new-york", "name": "New York (JFK)", "destination": "JFK" }
+  ]
+}
