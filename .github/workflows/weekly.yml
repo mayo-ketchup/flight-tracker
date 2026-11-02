@@ -11,6 +11,10 @@ on:
         description: "Send the email"
         type: boolean
         default: true
+      email_only:
+        description: "Only re-send the latest results by email (no searches)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -35,11 +39,13 @@ jobs:
           python-version: "3.12"
 
       - name: Search flights and update data
+        if: ${{ !inputs.email_only }}
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
         run: python tracker/tracker.py --no-email
 
       - name: Save price history
+        if: ${{ !inputs.email_only }}
         run: |
           git config user.name "flight-tracker-bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -48,20 +54,23 @@ jobs:
           git push
 
       - uses: actions/configure-pages@v5
+        if: ${{ !inputs.email_only }}
 
       - uses: actions/upload-pages-artifact@v4
+        if: ${{ !inputs.email_only }}
         with:
           path: site
 
       - name: Publish page
+        if: ${{ !inputs.email_only }}
         id: deploy
         uses: actions/deploy-pages@v4
 
       - name: Send email
-        if: github.event_name == 'schedule' || inputs.send_email
+        if: github.event_name == 'schedule' || inputs.send_email || inputs.email_only
         env:
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+          PAGE_URL: ${{ steps.deploy.outputs.page_url || format('https://{0}.github.io/{1}/', github.repository_owner, github.event.repository.name) }}
         run: python tracker/tracker.py --email-only
